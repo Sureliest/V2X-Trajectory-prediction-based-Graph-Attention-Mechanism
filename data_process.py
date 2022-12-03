@@ -1,19 +1,31 @@
+import pickle
+
 import numpy as np
 import os
+import math
+from scipy import spatial
 
-data_root = './Data/'
+data_root = '../Data/'
 i80_path = 'i80/'
 us101_path = 'us101/'
 write_root = './Data/frame/i80/'
+vehicle_id_path = '../Data/frame/Vehicle_ID/'
+frame_id_path = '../Data/frame/Frame_ID/'
+i80_1 = 'i80-1600-1615.txt'
+i80_2 = 'i80-1700-1715.txt'
+i80_3 = 'i80-1715-1730.txt'
+us101_1 = 'us101-0750-0805.txt'
+us101_2 = 'us101-0805-0820.txt'
+us101_3 = 'us101-0820-0835.txt'
 
 History_frames = 30  # 3 second * 10 frame
-Future_frames = 30  # 3 second * 10 frame
+Future_frames = 30  # 3 second * 10 frame 30/50
 Total_frames = History_frames + Future_frames
-# xy_range = 120 # max_x_range=121, max_y_range=118
-Max_num_object = 120  # maximum number of observed objects is 70
-Neighbor_distance = 10  # meter
-Delta = 0.3
-data_list = [0, 1, 2, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+Max_num_object = 30  # maximum number of observed objects
+Neighbor_distance = 100  # meter
+data_list = [0, 1, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+# 0:Vehicle_ID 1:Frame_ID 2:Total_Frames 3:Global_Time 4:Local_X 5:Local_Y 6:Global_X 7:Global_Y 8:v_Length 9:v_Width
+# 10:v_Class 11:v_Vel 12:v_Acc 13:Lane_ID 14:Preceding 15:Following 16:Space_Headway 17:Time_Headway
 
 
 def unitConversion(dataset):
@@ -25,26 +37,67 @@ def unitConversion(dataset):
     dataset["v_Vel"] = dataset["v_Vel"] * ft_to_m * 3.6
 
 
-def get_neighbour(now_dict, index, neighbour_distance):
+def compute_distance(list1, list2):
+    return math.sqrt((list2[1] - list1[1]) ** 2 + (list2[0] - list1[0]) ** 2)
+
+
+def get_neighbour(all_data, veh_ID, t_ID, neighbour_distance):
+    neighbour_matrix = []
+    neighbours = []
+    target_xy = []
+    neighbour_list = []
+    for data in all_data:
+        if data[0] == veh_ID and data[1] == t_ID:
+            target_xy = data[4:6]
+        elif data[0] != veh_ID and data[1] == t_ID:
+            neighbours.append(data)
+    for neighbour in neighbours:
+        if compute_distance(neighbour[4:6], target_xy) <= neighbour_distance and neighbours:
+            neighbour_matrix.append(neighbour[data_list])
+            neighbour_list.append(neighbour[0])
+    # print(t_ID)
+    # print('neighbours:{}, neighbour_matrix:{}'.format(neighbour_list, neighbour_matrix))
+
+    length = len(neighbour_matrix)
+    zero = np.zeros([Max_num_object - length - 1, len(data_list)])
+    return np.array(neighbour_matrix + list(zero), dtype=float), neighbours
+
+
+def process_data():
     pass
 
+def get_feature_matrix(all_data, neighbours, veh_ID, t_ID):
+    start_frame = int(t_ID) - History_frames + 1
+    end_frame = int(t_ID) + Future_frames
+    feature_matrix = np.zeros((Max_num_object, History_frames+Future_frames, len(data_list)))
+    timelist = [time for time in range(start_frame, end_frame+1)]
+    for i, time in enumerate(timelist):
+        pass
+    return list(feature_matrix)
 
-def get_frame_instance_dict(file_path):
-    pass
 
-
-def process_data(now_dict, start_index, end_index, delta):
-    pass
-
-
-def generate_data(delta):
-    train_data = []
-    test_data = []
-
-    return train_data, test_data
+def generate_data(all_data):
+    all_features = []
+    all_neighbours = []
+    all_xy = []
+    t_range = all_data[0, 2]
+    # print(t_range)
+    for data in all_data[0:31]:
+        veID = data[0]
+        t_ID = data[1]
+        now_data = all_data[all_data[:, 0] == veID]
+        if len(now_data[now_data[:, 1] < t_ID]) >= History_frames and \
+                len(now_data[now_data[:, 1] > t_ID]) >= Future_frames:
+            neighbour_matrix, neighbours = get_neighbour(all_data, veID, t_ID, Neighbor_distance)
+            all_xy.append(data[data_list])
+            all_neighbours.append(neighbour_matrix)
+            matrix = get_feature_matrix(all_data, neighbours, veID, t_ID,)
+            all_features.append(matrix)
+    return np.array(all_features), np.array(all_neighbours), np.array(all_xy)
 
 
 def generate_file(file_path):
+    print(file_path)
     all_data = []
     # get all data from txt:
     with open(file_path, 'r') as reader:
@@ -56,21 +109,33 @@ def generate_file(file_path):
                     vehicle_data.append(float(i))
             all_data.append(vehicle_data)
     all_data = np.array(all_data)  # cached all data
-    target_index = list(set(all_data[:, 0]))  # cached vehicle list
-    target_index = sorted(target_index)
-    frame_id_index = list(set(all_data[:, 1]))
-    frame_id_index = sorted(frame_id_index)
-    # print('vehicle list:', target_index)
-    print('vehicle length:{} ; frame length:{}'.format(len(target_index), len(frame_id_index)))
-    frame_dict = []
-    for self_id in target_index:
-        frame = [self_id]
-        for data in all_data:
-            if data[0] == self_id:
-                frame.append(data[1])
-        frame_dict.append(frame)
+    all_features, all_neighbour, all_xy = generate_data(all_data)
+    print(all_features.shape, all_neighbour.shape, all_xy.shape)
+    # print(all_data)
+    # local_x = all_data[:, 4]
+    # local_y = all_data[:, 5]
+    # print(local_x, local_y)
+    # min_x = min(local_x)
+    # max_x = max(local_x)
+    # min_y = min(local_y)
+    # max_y = max(local_y)
+    # return min_x*0.3048, min_y*0.3048, max_x*0.3048, max_y*0.3048
 
-    print(frame_dict)
+    # target_index = list(set(all_data[:, 0]))  # cached vehicle list
+    # target_index = sorted(target_index)
+    # frame_id_index = list(set(all_data[:, 1]))
+    # frame_id_index = sorted(frame_id_index)
+    # # print('vehicle list:', target_index)
+    # print('vehicle length:{} ; frame length:{}'.format(len(target_index), len(frame_id_index)))
+    # frame_dict = []
+    # for self_id in target_index:
+    #     frame = [self_id]
+    #     for data in all_data:
+    #         if data[0] == self_id:
+    #             frame.append(data[1])
+    #     frame_dict.append(frame)
+    #
+    # print(frame_dict)
     # generate data file by frame order
     # for frame_id in frame_id_index:
     #     now_dict = []
@@ -81,22 +146,33 @@ def generate_file(file_path):
     #     print('generating {}th frame data file'.format(int(frame_id)))
     #     np.savetxt(write_path, np.float_(now_dict), fmt='%f', delimiter=',')
 
-def get_vehicle_arrange(file_name):
-    print(file_name)
-    with open(file_name, 'r') as reader:
-        content = [x.strip().split(" ") for x in reader.readlines()]
-        print(content)
+
+def save_data(all_features, all_neighbour, all_xy):
+    save_path = 'save_data.pkl'
+    with open(save_path, 'wb') as writer:
+        pickle.dump([all_features, all_neighbour, all_xy], writer)
+
+
+def read_data():
+    file_path = 'save_data.pkl'
+    with open(file_path, 'rb') as reader:
+        [all_features, all_neighbour, all_xy] = pickle.load(reader)
 
 
 if __name__ == '__main__':
-    # print('Generating train/test data....:')
-    # data_file_path = os.path.join(data_root, i80_path, 'i80-1600-1615.txt')
-    # generate_file(data_file_path)
-    # print('Exited program')
+    print('Generating train/test data....:')
+    data_file_path = os.path.join(data_root, i80_path, i80_1)
+    generate_file(data_file_path)
 
-    file_path = '../Data/frame/i80/'
-    file_list = os.listdir(file_path)
-    max_x, max_y = 0, 0
-    for file_name in file_list:
-        file_name = file_path + file_name
-        get_vehicle_arrange(file_name)
+    # data_file_path2 = os.path.join(data_root, i80_path, i80_2)
+    # generate_file(data_file_path2)
+
+    # data_file_path3 = os.path.join(data_root, i80_path, i80_3)
+    # generate_file(data_file_path3)
+
+    # min_x, min_y, max_x, max_y: [0.117 0.0 93.659 1757.488] feet
+    # [0.0356616 0.0 28.547263200000003 535.6823424] meters  % meter = feet * 0.3048
+
+    # a1 = [[1, 1], [2, 2]]
+    # a2 = [[2, 1], [2, 5]]
+    # print(spatial.distance.cdist(a1, a2))
