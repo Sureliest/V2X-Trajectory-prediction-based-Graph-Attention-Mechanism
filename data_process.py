@@ -40,6 +40,7 @@ def process_data(now_dict, start_index, end_index, delta):
 def generate_data(delta):
     train_data = []
     test_data = []
+
     return train_data, test_data
 
 
@@ -80,9 +81,22 @@ def generate_file(file_path):
     #     print('generating {}th frame data file'.format(int(frame_id)))
     #     np.savetxt(write_path, np.float_(now_dict), fmt='%f', delimiter=',')
 
+def get_vehicle_arrange(file_name):
+    print(file_name)
+    with open(file_name, 'r') as reader:
+        content = [x.strip().split(" ") for x in reader.readlines()]
+        print(content)
+
 
 if __name__ == '__main__':
-    print('Generating train/test data....:')
-    data_file_path = os.path.join(data_root, i80_path, 'i80-1600-1615.txt')
-    generate_file(data_file_path)
-    print('Exited program')
+    # print('Generating train/test data....:')
+    # data_file_path = os.path.join(data_root, i80_path, 'i80-1600-1615.txt')
+    # generate_file(data_file_path)
+    # print('Exited program')
+
+    file_path = '../Data/frame/i80/'
+    file_list = os.listdir(file_path)
+    max_x, max_y = 0, 0
+    for file_name in file_list:
+        file_name = file_path + file_name
+        get_vehicle_arrange(file_name)
