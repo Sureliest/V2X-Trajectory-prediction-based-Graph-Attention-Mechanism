@@ -40,7 +40,8 @@ def unitConversion(dataset):
 
 
 def compute_distance(list1, list2):
-    return math.sqrt((list2[1] * 0.3048 - list1[1] * 0.3048) ** 2 + (list2[0] * 0.3048 - list1[0] * 0.3048) ** 2)
+    ft_to_m = 0.3048
+    return math.sqrt((list2[1] * ft_to_m - list1[1] * ft_to_m) ** 2 + (list2[0] * ft_to_m - list1[0] * ft_to_m) ** 2)
 
 
 def get_neighbour(all_data, veh_ID, t_ID, neighbour_distance):
@@ -60,14 +61,9 @@ def get_neighbour(all_data, veh_ID, t_ID, neighbour_distance):
                 neighbour_list.append(neighbour[0])
     # print(t_ID)
     # print('neighbours:{}, neighbour_matrix:{}'.format(neighbour_list, neighbour_matrix))
-
     length = len(neighbour_matrix)
     zero = np.zeros([Max_num_object - length - 1, len(data_list)])
     return np.array(neighbour_matrix + list(zero), dtype=float), neighbour_list
-
-
-def process_data(t_id, i, now_data):
-    pass
 
 
 def get_feature_matrix(all_data, neighbours, veh_ID, t_ID):
@@ -94,7 +90,7 @@ def generate_data(all_data):
     all_xy = []
     t_range = all_data[0, 2]
     # print(t_range)
-    for data in all_data[10000:12000]:
+    for data in all_data[1000000:1000300]:
         veID = data[0]
         t_ID = data[1]
         now_data = all_data[all_data[:, 0] == veID]
@@ -170,10 +166,10 @@ def save_data(features, neighbour, xy):
         pickle.dump([features, neighbour, xy], writer)
 
 
-def read_data():
-    file_path = 'save_data.pkl'
+def read_data(file_path):
     with open(file_path, 'rb') as reader:
         [features, neighbour, xy] = pickle.load(reader)
+    return features, neighbour, xy
 
 
 if __name__ == '__main__':
