@@ -24,6 +24,8 @@ Total_frames = History_frames + Future_frames
 Max_num_object = 30  # maximum number of observed objects
 Neighbor_distance = 100  # meter
 data_list = [0, 1, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+
+
 # 0:Vehicle_ID 1:Frame_ID 2:Total_Frames 3:Global_Time 4:Local_X 5:Local_Y 6:Global_X 7:Global_Y 8:v_Length 9:v_Width
 # 10:v_Class 11:v_Vel 12:v_Acc 13:Lane_ID 14:Preceding 15:Following 16:Space_Headway 17:Time_Headway
 
@@ -38,7 +40,7 @@ def unitConversion(dataset):
 
 
 def compute_distance(list1, list2):
-    return math.sqrt((list2[1] - list1[1]) ** 2 + (list2[0] - list1[0]) ** 2)
+    return math.sqrt((list2[1] * 0.3048 - list1[1] * 0.3048) ** 2 + (list2[0] * 0.3048 - list1[0] * 0.3048) ** 2)
 
 
 def get_neighbour(all_data, veh_ID, t_ID, neighbour_distance):
@@ -53,26 +55,36 @@ def get_neighbour(all_data, veh_ID, t_ID, neighbour_distance):
             neighbours.append(data)
     for neighbour in neighbours:
         if compute_distance(neighbour[4:6], target_xy) <= neighbour_distance and neighbours:
-            neighbour_matrix.append(neighbour[data_list])
-            neighbour_list.append(neighbour[0])
+            if len(neighbour_list) < Max_num_object - 1:
+                neighbour_matrix.append(neighbour[data_list])
+                neighbour_list.append(neighbour[0])
     # print(t_ID)
     # print('neighbours:{}, neighbour_matrix:{}'.format(neighbour_list, neighbour_matrix))
 
     length = len(neighbour_matrix)
     zero = np.zeros([Max_num_object - length - 1, len(data_list)])
-    return np.array(neighbour_matrix + list(zero), dtype=float), neighbours
+    return np.array(neighbour_matrix + list(zero), dtype=float), neighbour_list
 
 
-def process_data():
+def process_data(t_id, i, now_data):
     pass
+
 
 def get_feature_matrix(all_data, neighbours, veh_ID, t_ID):
     start_frame = int(t_ID) - History_frames + 1
     end_frame = int(t_ID) + Future_frames
-    feature_matrix = np.zeros((Max_num_object, History_frames+Future_frames, len(data_list)))
-    timelist = [time for time in range(start_frame, end_frame+1)]
-    for i, time in enumerate(timelist):
-        pass
+    feature_matrix = np.zeros((Max_num_object, History_frames + Future_frames, len(data_list)))
+    timelist = [time for time in range(start_frame, end_frame + 1)]
+    for time_index, time in enumerate(timelist):
+        now_dict = all_data[all_data[:, 0] == veh_ID]
+        data = now_dict[now_dict[:, 1] == time]
+        feature_matrix[0, time_index] = data[0][data_list]
+        for n_index, n_id in enumerate(neighbours):
+            # print(n_index, n_id)
+            n_dict = all_data[all_data[:, 0] == n_id]
+            n_data = n_dict[n_dict[:, 1] == time]
+            if n_data.size > 0:
+                feature_matrix[n_index + 1, time_index] = n_data[0][data_list]
     return list(feature_matrix)
 
 
@@ -82,7 +94,7 @@ def generate_data(all_data):
     all_xy = []
     t_range = all_data[0, 2]
     # print(t_range)
-    for data in all_data[0:31]:
+    for data in all_data[10000:12000]:
         veID = data[0]
         t_ID = data[1]
         now_data = all_data[all_data[:, 0] == veID]
@@ -91,7 +103,8 @@ def generate_data(all_data):
             neighbour_matrix, neighbours = get_neighbour(all_data, veID, t_ID, Neighbor_distance)
             all_xy.append(data[data_list])
             all_neighbours.append(neighbour_matrix)
-            matrix = get_feature_matrix(all_data, neighbours, veID, t_ID,)
+            print('neighbours', neighbours)
+            matrix = get_feature_matrix(all_data, neighbours, veID, t_ID, )
             all_features.append(matrix)
     return np.array(all_features), np.array(all_neighbours), np.array(all_xy)
 
@@ -110,7 +123,11 @@ def generate_file(file_path):
             all_data.append(vehicle_data)
     all_data = np.array(all_data)  # cached all data
     all_features, all_neighbour, all_xy = generate_data(all_data)
+    # print('features[0]:', all_features[:, 0])
+    # print('features[1]', all_features[:, 1])
+    # print('features[2]', all_features[:, 2])
     print(all_features.shape, all_neighbour.shape, all_xy.shape)
+    return all_features, all_neighbour, all_xy
     # print(all_data)
     # local_x = all_data[:, 4]
     # local_y = all_data[:, 5]
@@ -147,22 +164,28 @@ def generate_file(file_path):
     #     np.savetxt(write_path, np.float_(now_dict), fmt='%f', delimiter=',')
 
 
-def save_data(all_features, all_neighbour, all_xy):
+def save_data(features, neighbour, xy):
     save_path = 'save_data.pkl'
     with open(save_path, 'wb') as writer:
-        pickle.dump([all_features, all_neighbour, all_xy], writer)
+        pickle.dump([features, neighbour, xy], writer)
 
 
 def read_data():
     file_path = 'save_data.pkl'
     with open(file_path, 'rb') as reader:
-        [all_features, all_neighbour, all_xy] = pickle.load(reader)
+        [features, neighbour, xy] = pickle.load(reader)
 
 
 if __name__ == '__main__':
     print('Generating train/test data....:')
     data_file_path = os.path.join(data_root, i80_path, i80_1)
-    generate_file(data_file_path)
+    all_features, all_neighbour, all_xy = generate_file(data_file_path)
+    save_data(all_features, all_neighbour, all_xy)
+    # a = np.zeros((2, 3, 4))
+    # # a[0, 0] = np.array([1, 1, 1, 1])
+    # for i, num in enumerate(range(3)):
+    #     a[0, i] = np.array([num, num+1, num+2, num+3])
+    # print(a[a[:, :, 0] == 0 and a[:, :, 1] == 1])
 
     # data_file_path2 = os.path.join(data_root, i80_path, i80_2)
     # generate_file(data_file_path2)
